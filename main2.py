@@ -11,23 +11,46 @@ from config import *
 from utils import dist_to_segment
 from audio_engine import AudioScheduler
 
+# ==========================================
+# CUSTOM UI CONSTANTS (override config for fruity look)
+# ==========================================
+PANEL_COLOR = "#2d2d3a"  # deeper dark
+ACCENT_COLOR = "#ffb347"  # warm orange
+HIGHLIGHT_COLOR = "#ff6f61"  # coral
+BUTTON_COLOR = "#5a4a6a"  # purple
+BUTTON_HOVER = "#7a5a8a"  # lighter purple
+TEXT_COLOR = "#f0f0f0"  # off-white
+GRID_COLOR = "#3a3a4a"  # subtle grid
+BG_COLOR = "#1e1e28"  # very dark purple/blue
+
 
 # ==========================================
-# CUSTOM WIDGET: Collapsible Category Pane
+# CUSTOM WIDGETS (rounded corners)
 # ==========================================
+def create_rounded_rect(canvas, x1, y1, x2, y2, radius=25, **kwargs):
+    """Draw a rounded rectangle on a canvas."""
+    points = []
+    for x, y in [(x1 + radius, y1), (x2 - radius, y1), (x2, y1 + radius),
+                 (x2, y2 - radius), (x2 - radius, y2), (x1 + radius, y2),
+                 (x1, y2 - radius), (x1, y1 + radius)]:
+        points.extend([x, y])
+    return canvas.create_polygon(points, smooth=True, **kwargs)
+
+
 class CollapsiblePane(tk.Frame):
     def __init__(self, parent, title, expanded_default=True):
         super().__init__(parent, bg=PANEL_COLOR)
         self.expanded = expanded_default
 
         # Title bar
-        self.title_frame = tk.Frame(self, bg="#3a3a45")
+        self.title_frame = tk.Frame(self, bg="#3f3f4f", height=30)
         self.title_frame.pack(fill=tk.X, pady=(5, 0))
+        self.title_frame.pack_propagate(False)
 
         self.toggle_btn = tk.Label(self.title_frame, text="[-] " + title if expanded_default else "[+] " + title,
-                                   bg="#3a3a45", fg=TEXT_COLOR, font=("Arial", 10, "bold"), anchor="w", padx=10, pady=5,
+                                   bg="#3f3f4f", fg=TEXT_COLOR, font=("Arial", 10, "bold"), anchor="w", padx=10,
                                    cursor="hand2")
-        self.toggle_btn.pack(fill=tk.X)
+        self.toggle_btn.pack(fill=tk.BOTH, expand=True)
         self.toggle_btn.bind("<Button-1>", self.toggle)
 
         # Content frame
@@ -45,11 +68,8 @@ class CollapsiblePane(tk.Frame):
             self.content_frame.pack_forget()
 
 
-# ==========================================
-# HELPER: Scrollable Frame
-# ==========================================
 class ScrollableFrame(tk.Frame):
-    """A frame that can be scrolled vertically."""
+    """A frame that can be scrolled vertically, with rounded corners."""
 
     def __init__(self, parent, bg=PANEL_COLOR, *args, **kwargs):
         super().__init__(parent, bg=bg, *args, **kwargs)
@@ -85,6 +105,14 @@ class ProceduralSequencerApp:
         self.root = root
         self.root.title("Graph Soundtrack Engine - Breakcore & Auto-Save")
         self.grid_size = 60
+
+        # Use clam theme for modern look
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('TNotebook', background=PANEL_COLOR, borderwidth=0)
+        style.configure('TNotebook.Tab', background=BUTTON_COLOR, foreground=TEXT_COLOR,
+                        padding=[10, 2], borderwidth=0, focuscolor='none')
+        style.map('TNotebook.Tab', background=[('selected', ACCENT_COLOR), ('active', BUTTON_HOVER)])
 
         self.nodes = {}
         self.node_groups = []
@@ -127,28 +155,56 @@ class ProceduralSequencerApp:
     # UI Construction
     # ------------------------------------------------------------
     def _setup_ui(self):
+        self.root.configure(bg=BG_COLOR)
         self.main_frame = tk.Frame(self.root, bg=BG_COLOR)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # ----- Toolbar with instrument palette -----
-        self.toolbar = tk.Frame(self.main_frame, bg="#2a2a35", height=40)
+        # ----- Toolbar with instrument palette and save/load -----
+        self.toolbar = tk.Frame(self.main_frame, bg="#3f3f4f", height=50)
         self.toolbar.pack(side=tk.TOP, fill=tk.X)
         self.toolbar.pack_propagate(False)
 
-        tk.Label(self.toolbar, text="Instrument:", fg=TEXT_COLOR, bg="#2a2a35",
-                 font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(10, 5))
+        # Instrument label
+        tk.Label(self.toolbar, text="🎵 Instrument:", fg=TEXT_COLOR, bg="#3f3f4f",
+                 font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=(15, 5))
 
+        # Instrument buttons (colorful)
         self.instrument_buttons = {}
-        for inst in INSTRUMENTS:
-            btn = tk.Button(self.toolbar, text=inst, bg="#444", fg="white",
-                            relief=tk.FLAT, padx=8, pady=2,
+        colors = ["#ff6f61", "#6b5b95", "#88b04b", "#f7cac9", "#92a8d1", "#955251", "#b565a7", "#009b77"]
+        for i, inst in enumerate(INSTRUMENTS):
+            color = colors[i % len(colors)]
+            btn = tk.Button(self.toolbar, text=inst, bg=color, fg="white",
+                            relief=tk.FLAT, padx=10, pady=3, font=("Arial", 9, "bold"),
+                            activebackground=HIGHLIGHT_COLOR, activeforeground="white",
                             command=lambda i=inst: self.set_default_instrument(i))
-            btn.pack(side=tk.LEFT, padx=2)
+            btn.pack(side=tk.LEFT, padx=3)
             self.instrument_buttons[inst] = btn
+            # Hover effects
+            btn.bind("<Enter>", lambda e, b=btn, c=color: b.config(bg=HIGHLIGHT_COLOR))
+            btn.bind("<Leave>", lambda e, b=btn, c=color: b.config(bg=c))
+
         self._highlight_instrument_button(self.default_instrument)
 
-        # Optional dropdown (kept for compatibility)
-        tk.Label(self.toolbar, text="or", fg="#888", bg="#2a2a35").pack(side=tk.LEFT, padx=5)
+        # Separator
+        tk.Frame(self.toolbar, bg="#5a5a6a", width=2, height=30).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+
+        # Save & Load buttons
+        save_btn = tk.Button(self.toolbar, text="💾 Save", bg="#4a6a8a", fg="white",
+                             relief=tk.FLAT, padx=10, pady=3, font=("Arial", 10, "bold"),
+                             activebackground="#5a7a9a", command=self.save_project)
+        save_btn.pack(side=tk.LEFT, padx=5)
+        save_btn.bind("<Enter>", lambda e: save_btn.config(bg="#5a7a9a"))
+        save_btn.bind("<Leave>", lambda e: save_btn.config(bg="#4a6a8a"))
+
+        load_btn = tk.Button(self.toolbar, text="📂 Load", bg="#6a4c93", fg="white",
+                             relief=tk.FLAT, padx=10, pady=3, font=("Arial", 10, "bold"),
+                             activebackground="#7a5ca3", command=self.load_project)
+        load_btn.pack(side=tk.LEFT, padx=5)
+        load_btn.bind("<Enter>", lambda e: load_btn.config(bg="#7a5ca3"))
+        load_btn.bind("<Leave>", lambda e: load_btn.config(bg="#6a4c93"))
+
+        # Dropdown (optional, kept for compatibility)
+        tk.Label(self.toolbar, text="or", fg="#aaa", bg="#3f3f4f").pack(side=tk.LEFT, padx=5)
         self.current_tool_var = tk.StringVar(value=self.default_instrument)
         self.tool_dropdown = ttk.Combobox(self.toolbar, textvariable=self.current_tool_var,
                                           values=INSTRUMENTS, state="readonly", width=12)
@@ -156,7 +212,7 @@ class ProceduralSequencerApp:
         self.tool_dropdown.bind("<<ComboboxSelected>>",
                                 lambda e: self.set_default_instrument(self.current_tool_var.get()))
 
-        # ----- Canvas -----
+        # ----- Canvas (main area) -----
         self.canvas = tk.Canvas(self.main_frame, bg=BG_COLOR, highlightthickness=0)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -184,41 +240,38 @@ class ProceduralSequencerApp:
         self._build_global_tab()
 
         # ----- Status bar -----
-        self.status_bar = tk.Label(self.root, text="Ready", bd=1, relief=tk.SUNKEN,
-                                   anchor=tk.W, bg="#2a2a35", fg=TEXT_COLOR)
+        self.status_bar = tk.Label(self.root, text="Ready", bd=0, relief=tk.FLAT,
+                                   anchor=tk.W, bg="#3f3f4f", fg=TEXT_COLOR,
+                                   font=("Arial", 10), padx=10, pady=3)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
     def _build_properties_tab(self):
-        """Fill the Node Properties tab with scrollable controls."""
         scroll = ScrollableFrame(self.props_tab, bg=PANEL_COLOR)
         scroll.pack(fill=tk.BOTH, expand=True)
         content = scroll.inner_frame
 
-        # UI variables for node properties
         self.ui_vars = {k: tk.StringVar() if k in ["note", "instrument", "mode"] else tk.DoubleVar() for k in
                         ["note", "instrument", "mode", "length", "volume", "latency_self", "latency_out",
                          "choke_group"]}
         self.ui_vars["start_on_flag"] = tk.BooleanVar()
 
-        # Placeholder when no node selected
-        self.empty_label = tk.Label(content, text="\nSelect a node to view properties",
-                                    fg="#777", bg=PANEL_COLOR, font=("Arial", 10, "italic"))
+        self.empty_label = tk.Label(content, text="✨ Select a node to view properties",
+                                    fg="#aaa", bg=PANEL_COLOR, font=("Arial", 10, "italic"))
         self.empty_label.pack(pady=20)
 
-        # Node properties container (initially hidden)
         self.node_props_parent = tk.Frame(content, bg=PANEL_COLOR)
 
         # --- Basics ---
         basic_pane = CollapsiblePane(self.node_props_parent, "Node: Basics", True)
         basic_pane.pack(fill=tk.X, padx=5, pady=2)
 
-        tk.Label(basic_pane.content_frame, text="Note", fg="#aaa", bg=PANEL_COLOR).pack(anchor="w")
+        tk.Label(basic_pane.content_frame, text="Note", fg="#ccc", bg=PANEL_COLOR).pack(anchor="w")
         self.note_dropdown = ttk.Combobox(basic_pane.content_frame, textvariable=self.ui_vars["note"],
                                           values=self.get_current_scale(), state="readonly")
         self.note_dropdown.pack(fill=tk.X, pady=(0, 5))
         self.note_dropdown.bind("<<ComboboxSelected>>", lambda e: self.apply_settings())
 
-        tk.Label(basic_pane.content_frame, text="Instrument", fg="#aaa", bg=PANEL_COLOR).pack(anchor="w")
+        tk.Label(basic_pane.content_frame, text="Instrument", fg="#ccc", bg=PANEL_COLOR).pack(anchor="w")
         inst_menu = ttk.Combobox(basic_pane.content_frame, textvariable=self.ui_vars["instrument"],
                                  values=INSTRUMENTS, state="readonly")
         inst_menu.pack(fill=tk.X, pady=(0, 5))
@@ -226,8 +279,8 @@ class ProceduralSequencerApp:
 
         tk.Checkbutton(basic_pane.content_frame, text="Flag (Start on Play All)",
                        variable=self.ui_vars["start_on_flag"],
-                       bg=PANEL_COLOR, fg="#aaa", selectcolor="#222", command=self.apply_settings).pack(anchor="w",
-                                                                                                        pady=(5, 0))
+                       bg=PANEL_COLOR, fg="#ccc", selectcolor="#444", activebackground=PANEL_COLOR,
+                       command=self.apply_settings).pack(anchor="w", pady=(5, 0))
 
         # --- Timing & Mix ---
         timing_pane = CollapsiblePane(self.node_props_parent, "Node: Timing & Mix", True)
@@ -238,95 +291,91 @@ class ProceduralSequencerApp:
                     ("Self Latency (Beats)", "latency_self", 0.0, 4.0),
                     ("Out Latency (Beats)", "latency_out", 0.0, 4.0)]
         for label, key, low, high in sliders1:
-            tk.Label(timing_pane.content_frame, text=label, fg="#aaa", bg=PANEL_COLOR).pack(anchor="w")
+            tk.Label(timing_pane.content_frame, text=label, fg="#ccc", bg=PANEL_COLOR).pack(anchor="w")
             tk.Scale(timing_pane.content_frame, variable=self.ui_vars[key], from_=low, to=high, resolution=0.05,
-                     orient=tk.HORIZONTAL, bg=PANEL_COLOR, fg="white", highlightthickness=0, bd=0,
+                     orient=tk.HORIZONTAL, bg=PANEL_COLOR, fg="white", troughcolor="#444",
+                     highlightthickness=0, bd=0,
                      command=lambda _: self.apply_settings()).pack(fill=tk.X, pady=(0, 5))
 
         # --- Advanced Routing ---
         routing_pane = CollapsiblePane(self.node_props_parent, "Node: Advanced Routing", False)
         routing_pane.pack(fill=tk.X, padx=5, pady=2)
 
-        tk.Label(routing_pane.content_frame, text="Routing Mode", fg="#aaa", bg=PANEL_COLOR).pack(anchor="w")
+        tk.Label(routing_pane.content_frame, text="Routing Mode", fg="#ccc", bg=PANEL_COLOR).pack(anchor="w")
         mode_menu = ttk.Combobox(routing_pane.content_frame, textvariable=self.ui_vars["mode"],
                                  values=("Poly", "Splitter"), state="readonly")
         mode_menu.pack(fill=tk.X, pady=(0, 5))
         mode_menu.bind("<<ComboboxSelected>>", lambda e: self.apply_settings())
 
-        tk.Label(routing_pane.content_frame, text="Choke Group (0=Off)", fg="#aaa", bg=PANEL_COLOR).pack(anchor="w")
+        tk.Label(routing_pane.content_frame, text="Choke Group (0=Off)", fg="#ccc", bg=PANEL_COLOR).pack(anchor="w")
         tk.Scale(routing_pane.content_frame, variable=self.ui_vars["choke_group"], from_=0, to=8, resolution=1.0,
-                 orient=tk.HORIZONTAL, bg=PANEL_COLOR, fg="white", highlightthickness=0, bd=0,
+                 orient=tk.HORIZONTAL, bg=PANEL_COLOR, fg="white", troughcolor="#444",
+                 highlightthickness=0, bd=0,
                  command=lambda _: self.apply_settings()).pack(fill=tk.X)
 
     def _build_groups_tab(self):
-        """Fill the Groups & Schematics tab."""
         scroll = ScrollableFrame(self.groups_tab, bg=PANEL_COLOR)
         scroll.pack(fill=tk.BOTH, expand=True)
         content = scroll.inner_frame
 
-        # Group management
         group_frame = tk.Frame(content, bg=PANEL_COLOR)
         group_frame.pack(fill=tk.X, pady=(10, 5), padx=10)
-        tk.Button(group_frame, text="Group (Ctrl+G)", bg="#445", fg="white", font=("Arial", 8),
-                  relief=tk.FLAT, command=self.create_group).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 2))
-        tk.Button(group_frame, text="Ungroup (Ctrl+U)", bg="#544", fg="white", font=("Arial", 8),
-                  relief=tk.FLAT, command=self.ungroup).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=(2, 0))
+        tk.Button(group_frame, text="Group (Ctrl+G)", bg=BUTTON_COLOR, fg="white", font=("Arial", 8, "bold"),
+                  relief=tk.FLAT, activebackground=BUTTON_HOVER, command=self.create_group).pack(side=tk.LEFT,
+                                                                                                 expand=True, fill=tk.X,
+                                                                                                 padx=(0, 2))
+        tk.Button(group_frame, text="Ungroup (Ctrl+U)", bg="#8a4a4a", fg="white", font=("Arial", 8, "bold"),
+                  relief=tk.FLAT, activebackground="#aa6a6a", command=self.ungroup).pack(side=tk.RIGHT, expand=True,
+                                                                                         fill=tk.X, padx=(2, 0))
 
-        # Schematics section
         tk.Label(content, text="Schematics & Blueprints", bg=PANEL_COLOR,
                  fg=ACCENT_COLOR, font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(15, 5))
         tk.Button(content, text="Open Schematics Window", bg="#6a4c93", fg="white",
-                  font=("Arial", 9, "bold"), relief=tk.FLAT, pady=5,
+                  font=("Arial", 9, "bold"), relief=tk.FLAT, activebackground="#7a5ca3", pady=5,
                   command=self.open_schematic_window).pack(fill=tk.X, padx=10, pady=2)
         tk.Button(content, text="Save Selection as Schematic", bg="#008080", fg="white",
-                  font=("Arial", 9), relief=tk.FLAT, pady=5,
+                  font=("Arial", 9), relief=tk.FLAT, activebackground="#20a0a0", pady=5,
                   command=self.save_selection_as_schematic).pack(fill=tk.X, padx=10, pady=2)
         tk.Button(content, text="Load JSON Array from File...", bg="#2b2b3b", fg="white",
-                  font=("Arial", 9), relief=tk.FLAT, pady=5,
+                  font=("Arial", 9), relief=tk.FLAT, activebackground="#3b3b4b", pady=5,
                   command=self.load_schematic_file).pack(fill=tk.X, padx=10, pady=2)
 
-        # Advanced mode toggle
         tk.Checkbutton(content, text="Advanced Mode (Sharps #)", variable=self.advanced_mode,
-                       bg=PANEL_COLOR, fg="#aaa", selectcolor="#222", activebackground=PANEL_COLOR,
-                       activeforeground="#fff", command=self.refresh_note_menu).pack(anchor="w", padx=10, pady=(15, 5))
+                       bg=PANEL_COLOR, fg="#ccc", selectcolor="#444", activebackground=PANEL_COLOR,
+                       command=self.refresh_note_menu).pack(anchor="w", padx=10, pady=(15, 5))
 
     def _build_global_tab(self):
-        """Fill the Global Settings tab."""
         scroll = ScrollableFrame(self.global_tab, bg=PANEL_COLOR)
         scroll.pack(fill=tk.BOTH, expand=True)
         content = scroll.inner_frame
 
         tk.Label(content, text="GLOBAL BPM", fg=ACCENT_COLOR, bg=PANEL_COLOR,
-                 font=("Arial", 9)).pack(anchor="w", padx=10, pady=(10, 0))
+                 font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
         tk.Scale(content, variable=self.global_bpm, from_=60.0, to=300.0, resolution=1.0,
-                 orient=tk.HORIZONTAL, bg=PANEL_COLOR, fg="white",
+                 orient=tk.HORIZONTAL, bg=PANEL_COLOR, fg="white", troughcolor="#444",
                  highlightthickness=0, bd=0).pack(fill=tk.X, padx=10, pady=(0, 15))
 
-        tk.Button(content, text="Play All (Standard)", font=("Arial", 10, "bold"),
-                  bg="#3a3a45", fg=TEXT_COLOR, command=self.trigger_green_flag,
-                  relief=tk.FLAT, pady=8).pack(fill=tk.X, padx=10, pady=5)
-
-        # Could add more global controls here later
+        tk.Button(content, text="▶ Play All (Standard)", font=("Arial", 11, "bold"),
+                  bg="#4a8a4a", fg="white", activebackground="#6aaa6a",
+                  command=self.trigger_green_flag, relief=tk.FLAT, pady=8).pack(fill=tk.X, padx=10, pady=5)
 
     # ------------------------------------------------------------
     # Helper methods
     # ------------------------------------------------------------
     def _highlight_instrument_button(self, active_inst):
-        """Highlight the active instrument button."""
         for inst, btn in self.instrument_buttons.items():
             if inst == active_inst:
-                btn.config(bg="#5a5a6a", relief=tk.SUNKEN)
+                btn.config(relief=tk.SUNKEN, bg=HIGHLIGHT_COLOR)
             else:
-                btn.config(bg="#444", relief=tk.FLAT)
+                btn.config(relief=tk.FLAT)
 
     def set_default_instrument(self, instrument):
-        """Set default instrument from button or dropdown."""
         self.default_instrument = instrument
         self.current_tool_var.set(instrument)
         self._highlight_instrument_button(instrument)
 
     # ------------------------------------------------------------
-    # Existing methods (unchanged except for minor updates)
+    # Existing methods (unchanged from previous version)
     # ------------------------------------------------------------
     def load_user_schematics(self):
         if os.path.exists(USER_SCHEMATICS_FILE):
@@ -866,12 +915,13 @@ class ProceduralSequencerApp:
         g_size = self.grid_size * self.zoom
         offset_x, offset_y = -(self.cam_x * self.zoom) % g_size, -(self.cam_y * self.zoom) % g_size
 
+        # Draw grid
         for x in np.arange(offset_x, self.canvas.winfo_width() + g_size, g_size):
             self.canvas.create_line(x, 0, x, self.canvas.winfo_height(), fill=GRID_COLOR)
         for y in np.arange(offset_y, self.canvas.winfo_height() + g_size, g_size):
             self.canvas.create_line(0, y, self.canvas.winfo_width(), y, fill=GRID_COLOR)
 
-        # Draw permanent group boxes
+        # Draw group boxes (with rounded corners)
         for group in self.node_groups:
             valid_nodes = [nid for nid in group["nodes"] if nid in self.nodes]
             if not valid_nodes:
@@ -887,10 +937,12 @@ class ProceduralSequencerApp:
             sx1, sy1 = self.w2s(min_x, min_y)
             sx2, sy2 = self.w2s(max_x, max_y)
 
-            self.canvas.create_rectangle(sx1, sy1, sx2, sy2, outline=group["color"], width=2 * self.zoom, dash=(4, 4),
-                                         fill="#22222b", stipple="gray25")
-            self.canvas.create_text(sx1, sy1 - 10 * self.zoom, text=group["name"], fill=group["color"], anchor=tk.SW,
-                                    font=("Arial", int(10 * self.zoom), "bold"))
+            # Rounded rectangle for group
+            create_rounded_rect(self.canvas, sx1, sy1, sx2, sy2, radius=20 * self.zoom,
+                                outline=group["color"], width=2 * self.zoom, dash=(4, 4),
+                                fill="#22222b", stipple="gray25")
+            self.canvas.create_text(sx1, sy1 - 10 * self.zoom, text=group["name"], fill=group["color"],
+                                    anchor=tk.SW, font=("Arial", int(10 * self.zoom), "bold"))
 
         # Draw wires
         for nid, d in self.nodes.items():
@@ -913,7 +965,7 @@ class ProceduralSequencerApp:
             sx2, sy2 = self.w2s(self.mouse_w[0], self.mouse_w[1])
             self.canvas.create_line(sx1, sy1, sx2, sy2, fill="white", dash=(4, 4), width=2 * self.zoom)
 
-        # Draw nodes
+        # Draw nodes with glow effect for selected
         for nid, d in self.nodes.items():
             r = 20 * self.zoom * d["anim_scale"]
             sx, sy = self.w2s(d["x"], d["y"])
@@ -924,19 +976,28 @@ class ProceduralSequencerApp:
             r *= style["size_mult"]
             shape_type = style["shape"]
 
+            # Glow for selected nodes (semi-transparent outer ring)
+            if nid in self.selected_nodes:
+                glow_radius = r + 8 * self.zoom
+                self.canvas.create_oval(sx - glow_radius, sy - glow_radius,
+                                        sx + glow_radius, sy + glow_radius,
+                                        fill="", outline=HIGHLIGHT_COLOR, width=3 * self.zoom, stipple="gray50")
+
             r_flash = r + (10 * d["flash"] * self.zoom)
             if d["flash"] > 0.1:
-                self.canvas.create_oval(sx - r_flash, sy - r_flash, sx + r_flash, sy + r_flash, fill="",
-                                        outline=base_color, width=2 * self.zoom)
+                self.canvas.create_oval(sx - r_flash, sy - r_flash, sx + r_flash, sy + r_flash,
+                                        fill="", outline=base_color, width=2 * self.zoom)
 
             fill_color = "white" if d["flash"] > 0.5 else base_color
             outline = "#ffffff" if nid in self.selected_nodes else "#111"
             w = 4 if nid in self.selected_nodes else 2
 
             if shape_type == "circle":
-                self.canvas.create_oval(sx - r, sy - r, sx + r, sy + r, fill=fill_color, outline=outline, width=w)
+                self.canvas.create_oval(sx - r, sy - r, sx + r, sy + r,
+                                        fill=fill_color, outline=outline, width=w)
             elif shape_type == "rectangle":
-                self.canvas.create_rectangle(sx - r, sy - r, sx + r, sy + r, fill=fill_color, outline=outline, width=w)
+                self.canvas.create_rectangle(sx - r, sy - r, sx + r, sy + r,
+                                             fill=fill_color, outline=outline, width=w)
             elif shape_type == "polygon_hex":
                 points = [sx, sy - r, sx + r, sy + r * 0.8, sx - r, sy + r * 0.8]
                 self.canvas.create_polygon(points, fill=fill_color, outline=outline, width=w)
@@ -946,25 +1007,32 @@ class ProceduralSequencerApp:
 
             if d.get("start_on_flag", False):
                 flag_size = 10 * self.zoom
-                self.canvas.create_polygon(sx - r - 2, sy - r, sx - r + flag_size, sy - r, sx - r, sy - r - flag_size,
+                self.canvas.create_polygon(sx - r - 2, sy - r, sx - r + flag_size, sy - r,
+                                           sx - r, sy - r - flag_size,
                                            fill="#22aa22", outline="black", width=1)
-                self.canvas.create_line(sx - r - 2, sy - r, sx - r - 2, sy - r - flag_size, fill="black", width=1)
+                self.canvas.create_line(sx - r - 2, sy - r, sx - r - 2, sy - r - flag_size,
+                                        fill="black", width=1)
 
-            self.canvas.create_oval(sx - 10 * self.zoom, sy - 10 * self.zoom, sx + 10 * self.zoom, sy + 10 * self.zoom,
+            # Small inner circle for style
+            self.canvas.create_oval(sx - 10 * self.zoom, sy - 10 * self.zoom,
+                                    sx + 10 * self.zoom, sy + 10 * self.zoom,
                                     outline="black", width=1, stipple="gray50")
 
             display_text = f"{d['note']} (S)" if d.get("mode") == "Splitter" else d["note"]
-            self.canvas.create_text(sx, sy, text=display_text, fill="black", font=("Arial", int(9 * self.zoom), "bold"))
+            self.canvas.create_text(sx, sy, text=display_text, fill="black",
+                                    font=("Arial", int(9 * self.zoom), "bold"))
 
             if d.get("choke_group", 0) > 0:
-                self.canvas.create_text(sx + r - 5, sy - r + 5, text=str(int(d["choke_group"])), fill="white",
-                                        font=("Arial", int(8 * self.zoom), "bold"))
+                self.canvas.create_text(sx + r - 5, sy - r + 5, text=str(int(d["choke_group"])),
+                                        fill="white", font=("Arial", int(8 * self.zoom), "bold"))
 
+        # Draw selection rectangle
         if self.selection_rect:
             sx1, sy1 = self.w2s(self.selection_rect[0], self.selection_rect[1])
             sx2, sy2 = self.w2s(self.selection_rect[2], self.selection_rect[3])
             self.canvas.create_rectangle(sx1, sy1, sx2, sy2, outline=ACCENT_COLOR, dash=(4, 4))
 
+        # Schematic placement hint
         if self.active_schematic:
             self.canvas.create_text(20, 70, anchor=tk.NW,
                                     text=f"Placing Schematic: {self.active_schematic} (Right-Click to Cancel)",
